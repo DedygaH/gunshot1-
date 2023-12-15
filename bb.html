@@ -1,0 +1,338 @@
+<html>
+<head>
+  <!-- Define the style of the game elements -->
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+    canvas {
+      border: 3px solid green;
+    }
+    #score {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 20px;
+    }
+    #lives {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 20px;
+    }
+    #level {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 40px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- Create a canvas element to draw the game graphics -->
+  <canvas id="canvas" width="800" height="600"></canvas>
+  <!-- Create some div elements to show the score, lives, and level -->
+  <div id="score">Score: 0</div>
+  <div id="lives">Lives: 3</div>
+  <div id="level">Level 1</div>
+  <!-- Add a script element to write the game logic -->
+  <script>
+  // Получаем элемент canvas и его контекст
+var canvas = document.getElementById("canvas");
+var ctx = canvas.getContext("2d");
+
+// Определяем некоторые константы
+var FPS = 60; // Кадров в секунду
+var TARGET_RADIUS = 20; // Радиус мишеней
+var TARGET_SPEED = 5; // Скорость мишеней
+var BULLET_RADIUS = 5; // Радиус пуль
+var BULLET_SPEED = 10; // Скорость пуль
+var MAX_LIVES = 3; // Максимальное количество жизней
+var LEVEL_TIME = 10; // Время для каждого уровня в секундах
+var LEVEL_FACTOR = 1.2; // Фактор увеличения скорости и количества мишеней на уровень
+
+// Определяем некоторые переменные
+var score = 0; // Текущий счет
+var lives = MAX_LIVES; // Текущее количество жизней
+var level = 1; // Текущий уровень
+var targets = []; // Массив мишеней
+var bullets = []; // Массив пуль
+var mouseX = 0; // Позиция мыши по оси X
+var mouseY = 0; // Позиция мыши по оси Y
+var mouseDown = false; // Состояние кнопки мыши
+var levelTimer = 0; // Таймер для текущего уровня
+var levelText = document.getElementById("level"); // Элемент текста уровня
+
+// Добавляем слушателей событий для движения мыши и клика
+canvas.addEventListener("mousemove", function(e) {
+  // Получаем позицию мыши относительно canvas
+  var rect = canvas.getBoundingClientRect();
+  mouseX = e.clientX - rect.left;
+  mouseY = e.clientY - rect.top;
+});
+
+canvas.addEventListener("mousedown", function(e) {
+  // Устанавливаем состояние кнопки мыши в true
+  mouseDown = true;
+});
+
+canvas.addEventListener("mouseup", function(e) {
+  // Устанавливаем состояние кнопки мыши в false
+  mouseDown = false;
+});
+
+// Определяем функцию для создания объекта мишени
+function createTarget() {
+
+  // Выбираем случайную позицию внутри canvas
+  var x = Math.random() * (canvas.width - 2 * TARGET_RADIUS) + TARGET_RADIUS;
+  var y = Math.random() * (canvas.height - 2 * TARGET_RADIUS) + TARGET_RADIUS;
+
+  // Выбираем случайную позицию на краю canvas
+  //var x, y;
+  var side = Math.floor(Math.random() * 4);
+  switch (side) {
+    case 0: // Верх
+      x = Math.random() * canvas.width;
+      y = -TARGET_RADIUS;
+      break;
+    case 1: // Справа
+      x = canvas.width + TARGET_RADIUS;
+      y = Math.random() * canvas.height;
+      break;
+    case 2: // Внизу
+      x = Math.random() * canvas.width;
+      y = canvas.height + TARGET_RADIUS;
+      break;
+    case 3: // Слева
+      x = -TARGET_RADIUS;
+      y = Math.random() * canvas.height;
+      break;
+  }
+
+  // Выбираем случайный цвет
+  var colors = ["red", "green", "blue", "yellow", "pink", "cyan", "orange", "purple"];
+  var color = colors[Math.floor(Math.random() * colors.length)];
+
+  // Выбираем случайный угол и скорость
+  var angle = Math.random() * Math.PI * 2;
+  var vx = Math.cos(angle) * TARGET_SPEED * level;
+  var vy = Math.sin(angle) * TARGET_SPEED * level;
+
+  // Возвращаем объект мишени
+  return {
+    x: x,
+    y: y,
+    vx: vx,
+    vy: vy,
+    color: color
+  };
+}
+
+// Определяем функцию для создания объекта пули
+function createBullet() {
+  // Рассчитываем угол и скорость пули
+  var dx = mouseX - canvas.width / 2;
+  var dy = mouseY - canvas.height / 2;
+  var angle = Math.atan2(dy, dx);
+  var vx = Math.cos(angle) * BULLET_SPEED;
+  var vy = Math.sin(angle) * BULLET_SPEED;
+
+  // Возвращаем объект пули
+  return {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        vx: vx,
+        vy: vy
+      };
+    }
+	
+// Определяем функцию для обновления логики игры
+function update() {
+  // Обновляем таймер уровня
+  levelTimer++;
+
+  // Проверяем, закончился ли уровень
+  if (levelTimer >= LEVEL_TIME * FPS) {
+    // Увеличиваем уровень
+    level++;
+
+    // Сбрасываем таймер уровня
+    levelTimer = 0;
+
+    // Показываем текст уровня
+    levelText.innerHTML = "Уровень " + level;
+    levelText.style.display = "block";
+
+    // Очищаем массивы мишеней и пуль
+    targets = [];
+    bullets = [];
+  }
+
+  // Скрываем текст уровня через 2 секунды
+  if (levelTimer == 2 * FPS) {
+    levelText.style.display = "none";
+  }
+
+  // Создаем новую мишень каждую секунду
+  if (levelTimer % FPS == 0) {
+    var target = createTarget();
+    targets.push(target);
+  }
+
+  // Создаем новую пулю, если нажата кнопка мыши
+  if (mouseDown) {
+    var bullet = createBullet();
+    bullets.push(bullet);
+  }
+
+
+ // Обновляем позицию и скорость каждой мишени
+for (var i = 0; i < targets.length; i++) {
+  var target = targets[i];
+  target.x += target.vx;
+  target.y += target.vy;
+
+  // Проверяем, не вышла ли мишень за пределы canvas
+  if (target.x < TARGET_RADIUS) {
+    target.x = TARGET_RADIUS; // Устанавливаем координату x на минимальное допустимое значение
+    target.vx = -target.vx; // Меняем направление по оси X
+  }
+  if (target.x > canvas.width - TARGET_RADIUS) {
+    target.x = canvas.width - TARGET_RADIUS; // Устанавливаем координату x на максимальное допустимое значение
+    target.vx = -target.vx; // Меняем направление по оси X
+  }
+  if (target.y < TARGET_RADIUS) {
+    target.y = TARGET_RADIUS; // Устанавливаем координату y на минимальное допустимое значение
+    target.vy = -target.vy; // Меняем направление по оси Y
+  }
+  if (target.y > canvas.height - TARGET_RADIUS) {
+    target.y = canvas.height - TARGET_RADIUS; // Устанавливаем координату y на максимальное допустимое значение
+    target.vy = -target.vy; // Меняем направление по оси Y
+  }
+}
+
+
+
+
+
+  // Обновляем позицию каждой пули
+  for (var i = 0; i < bullets.length; i++) {
+    var bullet = bullets[i];
+    bullet.x += bullet.vx;
+    bullet.y += bullet.vy;
+  }
+
+  // Проверяем столкновения между пулями и мишенями
+  for (var i = 0; i < bullets.length; i++) {
+    var bullet = bullets[i];
+    for (var j = 0; j < targets.length; j++) {
+      var target = targets[j];
+
+      // Рассчитываем расстояние между пулей и мишенью
+      var dx = bullet.x - target.x;
+      var dy = bullet.y - target.y;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+
+      // Если расстояние меньше суммы радиусов, они сталкиваются
+      if (dist < BULLET_RADIUS + TARGET_RADIUS) {
+        // Удаляем пулю и мишень из массивов
+        bullets.splice(i, 1);
+        targets.splice(j, 1);
+
+        // Уменьшаем индексы, чтобы избежать пропуска следующих элементов
+        i--;
+        j--;
+
+        // Увеличиваем счет
+        score++;
+
+        // Прерываем внутренний цикл
+        break;
+      }
+    }
+  }
+
+  // Проверяем столкновения между мишенями и игроком
+  for (var i = 0; i < targets.length; i++) {
+    var target = targets[i];
+
+    // Рассчитываем расстояние между мишенью и игроком
+    var dx = target.x - canvas.width / 2;
+    var dy = target.y - canvas.height / 2;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+
+    // Если расстояние меньше суммы радиусов, они сталкиваются
+    if (dist < TARGET_RADIUS + BULLET_RADIUS) {
+      // Удаляем мишень из массива
+      targets.splice(i, 1);
+
+      // Уменьшаем индекс, чтобы избежать пропуска следующего элемента
+      i--;
+
+      // Уменьшаем количество жизней
+      lives--;
+
+      // Проверяем, завершена ли игра
+         if (lives == 0) {
+
+            // Stop the game loop
+            clearInterval(interval);
+
+            // Show a game over message
+            alert("Game over! Your score is " + score);
+          }
+        }
+      }
+
+      // Update the score and lives elements
+      document.getElementById("score").innerHTML = "Score: " + score;
+      document.getElementById("lives").innerHTML = "Lives: " + lives;
+    }
+
+// Определяем функцию для отрисовки графики игры
+function draw() {
+  // Очищаем canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Рисуем каждую мишень в виде заполненного круга
+  for (var i = 0; i < targets.length; i++) {
+    var target = targets[i];
+    ctx.beginPath();
+    ctx.arc(target.x, target.y, TARGET_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = target.color;
+    ctx.fill();
+    ctx.closePath();
+  }
+
+  // Рисуем каждую пулю в виде заполненного круга
+  for (var i = 0; i < bullets.length; i++) {
+    var bullet = bullets[i];
+    ctx.beginPath();
+    ctx.arc(bullet.x, bullet.y, BULLET_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = "black";
+    ctx.fill();
+    ctx.closePath();
+  }
+}
+
+// Устанавливаем игровой цикл
+var interval = setInterval(function() {
+  update();
+  draw();
+}, 1000 / FPS);
+
+ </script>
+  </body>
+</html>   
+
+сделай так, чтобы мишени находились внутри canvas
+
+
+
+
+
+
